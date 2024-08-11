@@ -68,15 +68,16 @@ def main():
         connection = Connection(
             options.address, options.port, username=options.username)
     else:
-        auth_token = authentication.AuthenticationToken()
+        flow = authentication.MicrosoftAuthFlow(persist_path='persist')
         try:
-            auth_token.authenticate(options.username, options.password)
+            if not flow.authenticated:
+                flow.authenticate()
         except YggdrasilError as e:
             print(e)
             sys.exit()
-        print("Logged in as %s..." % auth_token.username)
+        print("Logged in as %s..." % flow.get_token().username)
         connection = Connection(
-            options.address, options.port, auth_token=auth_token)
+            options.address, options.port, auth_token=flow.get_token())
 
     if options.dump_packets:
         def print_incoming(packet):
