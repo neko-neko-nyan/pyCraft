@@ -6,16 +6,19 @@ from minecraft.networking.packets import (
 from minecraft.networking.types import (
     FixedPoint, Integer, Angle, UnsignedByte, Byte, Boolean, UUID, Short,
     VarInt, Double, Float, String, Enum, Difficulty, Long, Vector, Direction,
-    PositionAndLook, multi_attribute_alias, attribute_transform,
+    PositionAndLook, multi_attribute_alias, Position,
 )
+from minecraft.utility import attribute_transform
 
 from .combat_event_packet import (
     CombatEventPacket, EnterCombatEventPacket, EndCombatEventPacket,
     DeathCombatEventPacket,
 )
+from .destroy_entities_packet import DestroyEntitiesPacket
 from .map_packet import MapPacket
 from .player_list_item_packet import PlayerListItemPacket
 from .player_position_and_look_packet import PlayerPositionAndLookPacket
+from .spawn_mob_packet import SpawnMobPacket
 from .spawn_object_packet import SpawnObjectPacket
 from .block_change_packet import BlockChangePacket, MultiBlockChangePacket
 from .explosion_packet import ExplosionPacket
@@ -48,7 +51,11 @@ def get_packets(context):
         PluginMessagePacket,
         PlayerListHeaderAndFooterPacket,
         EntityLookPacket,
-        ResourcePackSendPacket
+        ResourcePackSendPacket,
+        DestroyEntitiesPacket,
+        SpawnMobPacket,
+        BlockActionPacket,
+        EntityHeadLookPacket,
     }
 
     if context.protocol_earlier_eq(47):
@@ -70,11 +77,17 @@ def get_packets(context):
     if context.protocol_later_eq(94):
         packets |= {
             SoundEffectPacket,
+            VehicleMovePacket,
         }
 
     if context.protocol_later_eq(352):
         packets |= {
             FacePlayerPacket
+        }
+
+    if context.protocol_later_eq(352):
+        packets |= {
+            FacePlayerPacket,
         }
 
     return packets
@@ -426,3 +439,92 @@ class ResourcePackSendPacket(Packet):
             {"forced_message": String}
             if context.protocol_later_eq(PRE | 15) else {},
         ]
+
+
+class EntityPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x2B if context.protocol_version >= 471 else \
+               0x27 if context.protocol_version >= 389 else \
+               0x26 if context.protocol_version >= 345 else \
+               0x25 if context.protocol_version >= 332 else \
+               0x29 if context.protocol_version >= 318 else \
+               0x28 if context.protocol_version >= 94 else \
+               0x29 if context.protocol_version >= 70 else \
+               0x14
+
+    packet_name = "entity"
+    definition = [{"entity_id": VarInt}]
+
+
+class VehicleMovePacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x2C if context.protocol_version >= 471 else \
+               0x2B if context.protocol_version >= 389 else \
+               0x2A if context.protocol_version >= 345 else \
+               0x29 if context.protocol_version >= 332 else \
+               0x2A if context.protocol_version >= 318 else \
+               0x29
+
+    packet_name = "vehicle move clientbound"
+    definition = [
+        {'x': Double},
+        {'y': Double},
+        {'z': Double},
+        {'yaw': Float},
+        {'pitch': Float},
+    ]
+
+    # Note: See clientbound.play.PositionAndLookPacket for notes
+    # regarding accessing / modifying attributes here.
+    position = multi_attribute_alias(Vector, 'x', 'y', 'z')
+
+    look = multi_attribute_alias(Direction, 'yaw', 'pitch')
+
+    position_and_look = multi_attribute_alias(
+        PositionAndLook, 'x', 'y', 'z', 'yaw', 'pitch')
+
+
+class BlockActionPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x0A if context.protocol_version >= 332 else \
+               0x0B if context.protocol_version >= 318 else \
+               0x0A if context.protocol_version >= 70 else \
+               0x25 if context.protocol_version >= 69 else \
+               0x24
+
+    packet_name = "block action"
+    get_definition = staticmethod(lambda context: [
+        {'location': Position},
+        {'block_type': VarInt} if context.protocol_version == 347 else {},
+        {'action_id': UnsignedByte},     # TODO Interpret action_id and
+        {'action_param': UnsignedByte},  # action_param fields.
+        {'block_type': VarInt} if context.protocol_version != 347 else {},
+    ])
+
+
+class EntityHeadLookPacket(Packet):
+    @staticmethod
+    def get_id(context):
+        return 0x3B if context.protocol_version >= 471 else \
+               0x39 if context.protocol_version >= 461 else \
+               0x3A if context.protocol_version >= 451 else \
+               0x39 if context.protocol_version >= 389 else \
+               0x38 if context.protocol_version >= 352 else \
+               0x37 if context.protocol_version >= 345 else \
+               0x36 if context.protocol_version >= 336 else \
+               0x35 if context.protocol_version >= 332 else \
+               0x36 if context.protocol_version >= 318 else \
+               0x34 if context.protocol_version >= 70 else \
+               0x19
+
+    packet_name = 'entity head look'
+
+    fields = 'entity_id', 'head_yaw'
+
+    definition = [
+        {'entity_id': VarInt},
+        {'head_yaw': Angle},
+    ]

@@ -3,11 +3,7 @@
 """
 from collections import namedtuple
 
-# These aliases are retained for backward compatibility
-from minecraft.utility import (  # noqa: F401
-    descriptor, overridable_descriptor, overridable_property, attribute_alias,
-    multi_attribute_alias, attribute_transform, class_and_instancemethod,
-)
+from minecraft.utility import multi_attribute_alias
 
 
 class Vector(namedtuple('BaseVector', ('x', 'y', 'z'))):
@@ -100,3 +96,23 @@ class PositionAndLook(MutableRecord):
     position = multi_attribute_alias(Vector, 'x', 'y', 'z')
 
     look = multi_attribute_alias(Direction, 'yaw', 'pitch')
+
+
+LookAndDirection = namedtuple('LookAndDirection',
+                              ('yaw', 'pitch', 'head_pitch'))
+
+
+class PositionLookAndDirection(MutableRecord):
+    """
+    A mutable record containing 3 spation position coordinates,
+    2 rotational components and an additional pitch component for
+    the head of the object.
+    """
+    __slots__ = 'x', 'y', 'z', 'yaw', 'pitch', 'head_pitch'
+
+    position = multi_attribute_alias(Vector, 'x', 'y', 'z')
+
+    look = multi_attribute_alias(Direction, 'yaw', 'pitch')
+
+    look_and_direction = multi_attribute_alias(LookAndDirection,
+                                 'yaw', 'pitch', 'head_pitch')

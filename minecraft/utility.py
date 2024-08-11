@@ -122,50 +122,9 @@ class overridable_property(overridable_descriptor):
        descriptor, overridable by attributes of instances of the class
        in which the property occurs. See also 'overridable_descriptor' above.
     """
+
     def __get__(self, instance, _owner):
         return self._fget(instance)
-
-
-class descriptor(overridable_descriptor):
-    """Behaves identically to the builtin 'property' decorator of Python,
-       except that the getter, setter and deleter functions given by the
-       user are used as the raw __get__, __set__ and __delete__ functions
-       as defined in Python's descriptor protocol.
-
-       Since an instance of this class always havs '__set__' and '__delete__'
-       defined, it is a "data descriptor", so its binding behaviour cannot be
-       overridden in instances of the class in which it occurs. See
-       https://docs.python.org/3/reference/datamodel.html#descriptor-invocation
-       for more information. See also 'overridable_descriptor' above.
-    """
-    __slots__ = '_fset', '_fdel'
-
-    def __init__(self, fget=None, fset=None, fdel=None):
-        super(descriptor, self).__init__(fget=fget)
-        self._fset = fset if fset is not None else self._default_set
-        self._fdel = fdel if fdel is not None else self._default_del
-
-    def setter(self, fset):
-        self._fset = fset
-        return self
-
-    def deleter(self, fdel):
-        self._fdel = fdel
-        return self
-
-    @staticmethod
-    def _default_set(instance, value):
-        raise AttributeError("can't set attribute")
-
-    @staticmethod
-    def _default_del(instance):
-        raise AttributeError("can't delete attribute")
-
-    def __set__(self, instance, value):
-        return self._fset(self, instance, value)
-
-    def __delete__(self, instance):
-        return self._fdel(self, instance)
 
 
 class class_and_instancemethod:

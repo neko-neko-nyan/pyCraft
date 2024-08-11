@@ -8,7 +8,7 @@ import io
 
 import pynbt
 
-from .utility import Vector, class_and_instancemethod
+from .utility import Vector
 
 
 __all__ = (
@@ -18,6 +18,8 @@ __all__ = (
     'VarIntPrefixedByteArray', 'TrailingByteArray', 'String', 'UUID',
     'Position', 'NBT', 'PrefixedArray',
 )
+
+from ...utility import class_and_instancemethod
 
 
 class Type(object):

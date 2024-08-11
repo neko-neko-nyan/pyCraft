@@ -1,10 +1,10 @@
 from minecraft.networking.packets import Packet
-from minecraft.networking.types.utility import descriptor
 
 from minecraft.networking.types import (
     VarInt, UUID, Byte, Double, Integer, Angle, Short, Enum, Vector,
-    Direction, PositionAndLook, attribute_alias, multi_attribute_alias,
+    Direction, PositionAndLook, multi_attribute_alias,
 )
+from minecraft.utility import attribute_alias
 
 
 class SpawnObjectPacket(Packet):
@@ -18,25 +18,10 @@ class SpawnObjectPacket(Packet):
     fields = ('entity_id', 'object_uuid', 'type_id', 'x', 'y', 'z', 'pitch',
               'yaw', 'data', 'velocity_x', 'velocity_y', 'velocity_z')
 
-    @descriptor
-    def EntityType(desc, self, cls):  # pylint: disable=no-self-argument
-        if self is None:
-            # EntityType is being accessed as a class attribute.
-            raise AttributeError(
-                'This interface is deprecated:\n\n'
-                'As of pyCraft\'s support for Minecraft 1.14, the nested '
-                'class "SpawnObjectPacket.EntityType" cannot be accessed as a '
-                'class attribute, because it depends on the protocol version. '
-                'There are two ways to access the correct version of the '
-                'class:\n\n'
-                '1. Access the "EntityType" attribute of a '
-                '"SpawnObjectPacket" instance with its "context" property '
-                'set.\n\n'
-                '2. Call "SpawnObjectPacket.field_enum(\'type_id\', '
-                'context)".')
-        else:
-            # EntityType is being accessed as an instance attribute.
-            return self.field_enum('type_id', self.context)
+    @property
+    def EntityType(self):  # pylint: disable=no-self-argument
+        # EntityType is being accessed as an instance attribute.
+        return self.field_enum('type_id', self.context)
 
     @classmethod
     def field_enum(cls, field, context):

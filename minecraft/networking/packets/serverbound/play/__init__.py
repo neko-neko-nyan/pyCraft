@@ -9,6 +9,9 @@ from minecraft.networking.types import (
 )
 
 from .client_settings_packet import ClientSettingsPacket
+from .player_position_packet import PlayerPositionPacket
+from .use_entity_packet import UseEntityPacket
+from .vehicle_move_packet import VehicleMovePacket
 
 
 # Formerly known as state_playing_serverbound.
@@ -16,17 +19,25 @@ def get_packets(context):
     packets = {
         KeepAlivePacket,
         ChatPacket,
+        PlayerPositionPacket,
         PositionAndLookPacket,
         AnimationPacket,
         ClientStatusPacket,
         ClientSettingsPacket,
         PluginMessagePacket,
         PlayerBlockPlacementPacket,
+        UseEntityPacket,
     }
     if context.protocol_later_eq(69):
         packets |= {
             UseItemPacket,
         }
+
+    if context.protocol_later_eq(94):
+        packets |= {
+            VehicleMovePacket,
+        }
+
     if context.protocol_later_eq(107):
         packets |= {
             TeleportConfirmPacket,

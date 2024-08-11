@@ -1,9 +1,10 @@
 from minecraft.networking.packets import Packet
 from minecraft.networking.types import (
     Type, VarInt, VarLong, UnsignedLong, Integer, UnsignedByte, Position,
-    Vector, MutableRecord, PrefixedArray, Boolean, attribute_alias,
+    Vector, MutableRecord, PrefixedArray, Boolean,
     multi_attribute_alias,
 )
+from minecraft.utility import attribute_alias
 
 
 class BlockChangePacket(Packet):

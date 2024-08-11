@@ -50,16 +50,7 @@ def minecraft_sha1_hash_digest(sha1_hash):
 
 
 def _number_from_bytes(b, signed=False):
-    try:
-        return int.from_bytes(b, byteorder='big', signed=signed)
-    except AttributeError:  # pragma: no cover
-        # py-2 compatibility
-        if len(b) == 0:
-            b = b'\x00'
-        num = int(str(b).encode('hex'), 16)
-        if signed and (ord(b[0]) & 0x80):
-            num -= 2 ** (len(b) * 8)
-        return num
+    return int.from_bytes(b, byteorder='big', signed=signed)
 
 
 class EncryptedFileObjectWrapper(object):

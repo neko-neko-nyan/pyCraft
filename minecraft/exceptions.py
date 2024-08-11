@@ -71,7 +71,7 @@ class LoginDisconnect(ConnectionFailure):
 
 class InvalidState(ConnectionFailure):
     """Raised by 'minecraft.networking.Connection' when a connection attempt
-       fails due to to the internal state of the Connection being unsuitable,
+       fails due to the internal state of the Connection being unsuitable,
        for example if there is an existing ongoing connection.
     """
 

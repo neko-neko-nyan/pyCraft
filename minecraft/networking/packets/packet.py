@@ -2,8 +2,9 @@ from zlib import compress
 
 from .packet_buffer import PacketBuffer
 from minecraft.networking.types import (
-    VarInt, Enum, overridable_property,
+    VarInt, Enum,
 )
+from ...utility import overridable_property
 
 
 class Packet(object):

@@ -129,6 +129,15 @@ class Connection(object):
                             will be handled by any matching exception handlers.
         """  # NOQA
 
+        if username is not None and auth_token is not None:
+            raise ValueError("username and auth_token cannot be used together")
+
+        if username is None and auth_token is None:
+            raise ValueError("Neither username nor auth_token was set")
+
+        if username is None:
+            username = auth_token.get_profile().name
+
         # This lock is re-entrant because it may be acquired in a re-entrant
         # manner from within an outgoing packet
         self._write_lock = RLock()
@@ -405,10 +414,7 @@ class Connection(object):
                 # connect.
                 self._handshake(next_state=STATE_PLAYING)
                 login_start_packet = serverbound.login.LoginStartPacket()
-                if self.auth_token:
-                    login_start_packet.name = self.auth_token.profile.name
-                else:
-                    login_start_packet.name = self.username
+                login_start_packet.name = self.username
                 self.write_packet(login_start_packet)
                 self.reactor = LoginReactor(self)
             else:
