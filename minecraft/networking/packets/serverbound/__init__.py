@@ -1,3 +1,1 @@
-"""
-Contains the serverbound packets for `pyminecraft`.
-"""
+from . import handshake, login, play, status, plugins

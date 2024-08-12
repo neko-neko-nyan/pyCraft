@@ -76,8 +76,8 @@ def main():
             print(e)
             sys.exit()
         print("Logged in as %s..." % flow.get_token().username)
-        connection = Connection(
-            options.address, options.port, auth_token=flow.get_token())
+        connection = Connection(  # , allowed_versions=[340]
+            options.address, options.port, auth_token=flow.get_token(), enable_fml=True)
 
     if options.dump_packets:
         def print_incoming(packet):
@@ -113,7 +113,7 @@ def main():
 
     connection.connect()
 
-    while True:
+    while connection.connected:
         try:
             text = input()
             if text == "/respawn":

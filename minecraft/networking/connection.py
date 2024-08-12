@@ -1,25 +1,18 @@
+import socket
+import sys
+import threading
 from collections import deque
 from threading import RLock
-import zlib
-import threading
-import socket
-import timeit
-import select
-import sys
-import json
-import re
 
-from .types import VarInt
-from .packets import clientbound, serverbound
-from . import packets, encryption
+from . import packets, reactors
+from .packets import serverbound
 from .. import (
     utility, KNOWN_MINECRAFT_VERSIONS, SUPPORTED_MINECRAFT_VERSIONS,
     SUPPORTED_PROTOCOL_VERSIONS, PROTOCOL_VERSION_INDICES
 )
 from ..exceptions import (
-    VersionMismatch, LoginDisconnect, IgnorePacket, InvalidState
+    VersionMismatch, IgnorePacket, InvalidState
 )
-
 
 STATE_STATUS = 1
 STATE_PLAYING = 2
@@ -30,8 +23,10 @@ class ConnectionContext(object):
     shared by the Connection class with other classes, such as Packet.
     Importantly, it can be used without knowing the interface of Connection.
     """
-    def __init__(self, **kwds):
-        self.protocol_version = kwds.get('protocol_version')
+    def __init__(self, **kwargs):
+        self.protocol_version = kwargs.get('protocol_version')
+        self.enable_fml = kwargs.get('enable_fml', False)
+        self.fml_mods = kwargs.get('fml_mods', [])
 
     def protocol_earlier(self, other_pv):
         """Returns True if the protocol version of this context was published
@@ -85,6 +80,7 @@ class Connection(object):
         allowed_versions=None,
         handle_exception=None,
         handle_exit=None,
+        enable_fml=False,
     ):
         """Sets up an instance of this object to be able to connect to a
         minecraft server.
@@ -152,14 +148,10 @@ class Connection(object):
 
         def proto_version(version):
             if isinstance(version, str):
-                proto_version = SUPPORTED_MINECRAFT_VERSIONS.get(version)
-            elif isinstance(version, int):
-                proto_version = version
-            else:
-                proto_version = None
-            if proto_version not in SUPPORTED_PROTOCOL_VERSIONS:
+                version = SUPPORTED_MINECRAFT_VERSIONS.get(version)
+            if version not in SUPPORTED_PROTOCOL_VERSIONS:
                 raise ValueError('Unsupported version number: %r.' % version)
-            return proto_version
+            return version
 
         if allowed_versions is None:
             self.allowed_proto_versions = set(SUPPORTED_PROTOCOL_VERSIONS)
@@ -175,7 +167,7 @@ class Connection(object):
         else:
             self.default_proto_version = proto_version(initial_version)
 
-        self.context = ConnectionContext(protocol_version=latest_allowed_proto)
+        self.context = ConnectionContext(protocol_version=latest_allowed_proto, enable_fml=enable_fml)
 
         self.options = _ConnectionOptions()
         self.options.address = address
@@ -188,9 +180,12 @@ class Connection(object):
         self.exception, self.exc_info = None, None
         self.handle_exit = handle_exit
 
+        self.spawned = False
+        self.socket = None
+
         # The reactor handles all the default responses to packets,
         # it should be changed per networking state
-        self.reactor = PacketReactor(self)
+        self.reactor = reactors.PacketReactor(self)
 
     def _start_network_thread(self):
         with self._write_lock:
@@ -219,7 +214,7 @@ class Connection(object):
         packet writing queue to be sent 'as soon as possible'
 
         :param packet: The :class:`network.packets.Packet` to write
-        :param force(bool): Specifies if the packet write should be immediate
+        :param force: Specifies if the packet write should be immediate
         """
         packet.context = self.context
         if force:
@@ -228,31 +223,31 @@ class Connection(object):
         else:
             self._outgoing_packet_queue.append(packet)
 
-    def listener(self, *packet_types, **kwds):
+    def listener(self, *packet_types, **kwargs):
         """
         Shorthand decorator to register a function as a packet listener.
 
         Wraps :meth:`minecraft.networking.connection.register_packet_listener`
         :param packet_types: Packet types to listen for.
-        :param kwds: Keyword arguments for `register_packet_listener`
+        :param kwargs: Keyword arguments for `register_packet_listener`
         """
         def listener_decorator(handler_func):
-            self.register_packet_listener(handler_func, *packet_types, **kwds)
+            self.register_packet_listener(handler_func, *packet_types, **kwargs)
             return handler_func
 
         return listener_decorator
 
-    def exception_handler(self, *exc_types, **kwds):
+    def exception_handler(self, *exc_types, **kwargs):
         """
         Shorthand decorator to register a function as an exception handler.
         """
         def exception_handler_decorator(handler_func):
-            self.register_exception_handler(handler_func, *exc_types, **kwds)
+            self.register_exception_handler(handler_func, *exc_types, **kwargs)
             return handler_func
 
         return exception_handler_decorator
 
-    def register_packet_listener(self, method, *packet_types, **kwds):
+    def register_packet_listener(self, method, *packet_types, **kwargs):
         """
         Registers a listener method which will be notified when a packet of
         a selected type is received.
@@ -276,15 +271,15 @@ class Connection(object):
                       'outgoing=True', the listener will be called before the
                       packet is written to the network, rather than afterwards.
         """
-        outgoing = kwds.pop('outgoing', False)
-        early = kwds.pop('early', False)
+        outgoing = kwargs.pop('outgoing', False)
+        early = kwargs.pop('early', False)
         target = self.packet_listeners if not early and not outgoing \
             else self.early_packet_listeners if early and not outgoing \
             else self.outgoing_packet_listeners if not early \
             else self.early_outgoing_packet_listeners
-        target.append(packets.PacketListener(method, *packet_types, **kwds))
+        target.append(packets.PacketListener(method, *packet_types))
 
-    def register_exception_handler(self, handler_func, *exc_types, **kwds):
+    def register_exception_handler(self, handler_func, *exc_types, **kwargs):
         """
         Register a function to be called when an unhandled exception occurs
         in the networking thread.
@@ -315,8 +310,8 @@ class Connection(object):
         :param early: If 'True', the exception handler is registered before
         any existing exception handlers in the handling order.
         """
-        early = kwds.pop('early', False)
-        assert not kwds, 'Unexpected keyword arguments: %r' % (kwds,)
+        early = kwargs.pop('early', False)
+        assert not kwargs, 'Unexpected keyword arguments: %r' % (kwargs,)
         if early:
             self._exception_handlers.insert(0, (handler_func, exc_types))
         else:
@@ -363,7 +358,7 @@ class Connection(object):
                               False to ignore the result.
         :param handle_ping: a function to be called with the measured latency
                             in milliseconds, None for the default handler,
-                            which prints the latency to standard outout, or
+                            which prints the latency to standard output, or
                             False, to prevent measurement of the latency.
         """
         with self._write_lock:  # pylint: disable=not-context-manager
@@ -374,7 +369,7 @@ class Connection(object):
             self._start_network_thread()
 
             do_ping = handle_ping is not False
-            self.reactor = StatusReactor(self, do_ping=do_ping)
+            self.reactor = reactors.StatusReactor(self, do_ping=do_ping)
 
             if handle_status is False:
                 self.reactor.handle_status = lambda *args, **kwds: None
@@ -416,13 +411,13 @@ class Connection(object):
                 login_start_packet = serverbound.login.LoginStartPacket()
                 login_start_packet.name = self.username
                 self.write_packet(login_start_packet)
-                self.reactor = LoginReactor(self)
+                self.reactor = reactors.LoginReactor(self)
             else:
                 # Determine the server's protocol version by first performing a
                 # status query.
                 self._handshake(next_state=STATE_STATUS)
                 self.write_packet(serverbound.status.RequestPacket())
-                self.reactor = PlayingStatusReactor(self)
+                self.reactor = reactors.PlayingStatusReactor(self)
             self._start_network_thread()
 
     def _check_connection(self):
@@ -491,6 +486,8 @@ class Connection(object):
         handshake.server_address = self.options.address
         handshake.server_port = self.options.port
         handshake.next_state = next_state
+        if self.context.enable_fml:
+            handshake.server_address += "\0FML\0"
 
         self.write_packet(handshake)
 
@@ -544,7 +541,8 @@ class Connection(object):
             exc_value, exc_tb = exc_info[1:]
             raise exc_value.with_traceback(exc_tb)
 
-    def _version_mismatch(self, server_protocol=None, server_version=None):
+    @staticmethod
+    def _version_mismatch(server_protocol=None, server_version=None):
         if server_protocol is None:
             server_protocol = KNOWN_MINECRAFT_VERSIONS.get(server_version)
 
@@ -645,246 +643,3 @@ class NetworkingThread(threading.Thread):
             if exc_info is not None:
                 exc_value, exc_tb = exc_info[1:]
                 raise exc_value.with_traceback(exc_tb)
-
-
-class PacketReactor(object):
-    """
-    Reads and reacts to packets
-    """
-    state_name = None
-
-    # Handshaking is considered the "default" state
-    get_clientbound_packets = staticmethod(clientbound.handshake.get_packets)
-
-    def __init__(self, connection):
-        self.connection = connection
-        context = self.connection.context
-        self.clientbound_packets = {
-            packet.get_id(context): packet
-            for packet in self.__class__.get_clientbound_packets(context)}
-
-    def read_packet(self, stream, timeout=0):
-        # Block for up to `timeout' seconds waiting for `stream' to become
-        # readable, returning `None' if the timeout elapses.
-        ready_to_read = select.select([stream], [], [], timeout)[0]
-
-        if ready_to_read:
-            length = VarInt.read(stream)
-
-            packet_data = packets.PacketBuffer()
-            packet_data.send(stream.read(length))
-            # Ensure we read all the packet
-            while len(packet_data.get_writable()) < length:
-                packet_data.send(
-                    stream.read(length - len(packet_data.get_writable())))
-            packet_data.reset_cursor()
-
-            if self.connection.options.compression_enabled:
-                decompressed_size = VarInt.read(packet_data)
-                if decompressed_size > 0:
-                    decompressor = zlib.decompressobj()
-                    decompressed_packet = decompressor.decompress(
-                                                       packet_data.read())
-                    assert len(decompressed_packet) == decompressed_size, \
-                        'decompressed length %d, but expected %d' % \
-                        (len(decompressed_packet), decompressed_size)
-                    packet_data.reset()
-                    packet_data.send(decompressed_packet)
-                    packet_data.reset_cursor()
-
-            packet_id = VarInt.read(packet_data)
-
-            # If we know the structure of the packet, attempt to parse it
-            # otherwise, just return an instance of the base Packet class.
-            if packet_id in self.clientbound_packets:
-                packet = self.clientbound_packets[packet_id]()
-                packet.context = self.connection.context
-                packet.read(packet_data)
-            else:
-                packet = packets.Packet()
-                packet.context = self.connection.context
-                packet.id = packet_id
-            return packet
-        else:
-            return None
-
-    def react(self, packet):
-        """Called with each incoming packet after early packet listeners are
-           run (if none of them raise 'IgnorePacket'), but before regular
-           packet listeners are run. If this method raises 'IgnorePacket', no
-           subsequent packet listeners will be called for this packet.
-        """
-        raise NotImplementedError("Call to base reactor")
-
-    def handle_exception(self, exc, exc_info):
-        """Called when an exception is raised in the networking thread. If this
-           method returns True, the default action will be prevented and the
-           exception ignored (but the networking thread will still terminate).
-        """
-        return False
-
-
-class LoginReactor(PacketReactor):
-    get_clientbound_packets = staticmethod(clientbound.login.get_packets)
-
-    def react(self, packet):
-        if packet.packet_name == "encryption request":
-
-            secret = encryption.generate_shared_secret()
-            token, encrypted_secret = encryption.encrypt_token_and_secret(
-                packet.public_key, packet.verify_token, secret)
-
-            # A server id of '-' means the server is in offline mode
-            if packet.server_id != '-':
-                server_id = encryption.generate_verification_hash(
-                    packet.server_id, secret, packet.public_key)
-                if self.connection.auth_token is not None:
-                    self.connection.auth_token.join(server_id)
-
-            encryption_response = serverbound.login.EncryptionResponsePacket()
-            encryption_response.shared_secret = encrypted_secret
-            encryption_response.verify_token = token
-
-            # Forced because we'll have encrypted the connection by the time
-            # it reaches the outgoing queue
-            self.connection.write_packet(encryption_response, force=True)
-
-            # Enable the encryption
-            cipher = encryption.create_AES_cipher(secret)
-            encryptor = cipher.encryptor()
-            decryptor = cipher.decryptor()
-            self.connection.socket = encryption.EncryptedSocketWrapper(
-                self.connection.socket, encryptor, decryptor)
-            self.connection.file_object = \
-                encryption.EncryptedFileObjectWrapper(
-                    self.connection.file_object, decryptor)
-
-        elif packet.packet_name == "disconnect":
-            # Receiving a disconnect packet in the login state indicates an
-            # abnormal condition. Raise an exception explaining the situation.
-            try:
-                msg = json.loads(packet.json_data)['text']
-            except (ValueError, TypeError, KeyError):
-                msg = packet.json_data
-            match = re.match(r"Outdated (client! Please use|server!"
-                             r" I'm still on) (?P<ver>\S+)$", msg)
-            if match:
-                ver = match.group('ver')
-                self.connection._version_mismatch(server_version=ver)
-            raise LoginDisconnect('The server rejected our login attempt '
-                                  'with: "%s".' % msg)
-
-        elif packet.packet_name == "login success":
-            self.connection.reactor = PlayingReactor(self.connection)
-
-        elif packet.packet_name == "set compression":
-            self.connection.options.compression_threshold = packet.threshold
-            self.connection.options.compression_enabled = True
-
-        elif packet.packet_name == "login plugin request":
-            self.connection.write_packet(
-                serverbound.login.PluginResponsePacket(
-                    message_id=packet.message_id, successful=False))
-
-
-class PlayingReactor(PacketReactor):
-    get_clientbound_packets = staticmethod(clientbound.play.get_packets)
-
-    def react(self, packet):
-        if packet.packet_name == "set compression":
-            self.connection.options.compression_threshold = packet.threshold
-            self.connection.options.compression_enabled = True
-
-        elif packet.packet_name == "keep alive":
-            keep_alive_packet = serverbound.play.KeepAlivePacket()
-            keep_alive_packet.keep_alive_id = packet.keep_alive_id
-            self.connection.write_packet(keep_alive_packet)
-
-        elif packet.packet_name == "player position and look":
-            if self.connection.context.protocol_later_eq(107):
-                teleport_confirm = serverbound.play.TeleportConfirmPacket()
-                teleport_confirm.teleport_id = packet.teleport_id
-                self.connection.write_packet(teleport_confirm)
-            else:
-                position_response = serverbound.play.PositionAndLookPacket()
-                position_response.x = packet.x
-                position_response.feet_y = packet.y
-                position_response.z = packet.z
-                position_response.yaw = packet.yaw
-                position_response.pitch = packet.pitch
-                position_response.on_ground = True
-                self.connection.write_packet(position_response)
-            self.connection.spawned = True
-
-        elif packet.packet_name == "disconnect":
-            self.connection.disconnect()
-
-
-class StatusReactor(PacketReactor):
-    get_clientbound_packets = staticmethod(clientbound.status.get_packets)
-
-    def __init__(self, connection, do_ping=False):
-        super(StatusReactor, self).__init__(connection)
-        self.do_ping = do_ping
-
-    def react(self, packet):
-        if packet.packet_name == "response":
-            status_dict = json.loads(packet.json_response)
-            if self.do_ping:
-                ping_packet = serverbound.status.PingPacket()
-                # NOTE: it may be better to depend on the `monotonic' package
-                # or something similar for more accurate time measurement.
-                ping_packet.time = int(1000 * timeit.default_timer())
-                self.connection.write_packet(ping_packet)
-            else:
-                self.connection.disconnect()
-            self.handle_status(status_dict)
-
-        elif packet.packet_name == "ping":
-            if self.do_ping:
-                now = int(1000 * timeit.default_timer())
-                self.connection.disconnect()
-                self.handle_ping(now - packet.time)
-
-    def handle_status(self, status_dict):
-        print(status_dict)
-
-    def handle_ping(self, latency_ms):
-        print('Ping: %d ms' % latency_ms)
-
-
-class PlayingStatusReactor(StatusReactor):
-    def __init__(self, connection):
-        super(PlayingStatusReactor, self).__init__(connection, do_ping=False)
-
-    def handle_status(self, status):
-        if status == {}:
-            # This can occur when we connect to a Mojang server while it is
-            # still initialising, so it must not cause the client to connect
-            # with the default version.
-            raise IOError('Invalid server status.')
-        elif 'version' not in status or 'protocol' not in status['version']:
-            return self.handle_failure()
-
-        proto = status['version']['protocol']
-        if proto not in self.connection.allowed_proto_versions:
-            self.connection._version_mismatch(
-                server_protocol=proto,
-                server_version=status['version'].get('name'))
-
-        self.handle_proto_version(proto)
-
-    def handle_proto_version(self, proto_version):
-        self.connection.allowed_proto_versions = {proto_version}
-        self.connection.connect()
-
-    def handle_failure(self):
-        self.handle_proto_version(self.connection.default_proto_version)
-
-    def handle_exception(self, exc, exc_info):
-        if isinstance(exc, EOFError):
-            # An exception of this type may indicate that the server does not
-            # properly support status queries, so we treat it as non-fatal.
-            self.connection.disconnect(immediate=True)
-            self.handle_failure()
-            return True
