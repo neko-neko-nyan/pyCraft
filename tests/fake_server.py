@@ -7,7 +7,7 @@ from minecraft.networking import packets
 from minecraft.networking.packets import clientbound
 from minecraft.networking.packets import serverbound
 from minecraft.networking.encryption import (
-    create_AES_cipher, EncryptedFileObjectWrapper, EncryptedSocketWrapper
+    create_aes_cipher, EncryptedFileObjectWrapper, EncryptedSocketWrapper
 )
 
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
@@ -287,7 +287,7 @@ class FakeClientHandler(object):
         assert client_token == server_token
         shared_secret = private_key.decrypt(packet.shared_secret, PKCS1v15())
 
-        cipher = create_AES_cipher(shared_secret)
+        cipher = create_aes_cipher(shared_secret)
         enc, dec = cipher.encryptor(), cipher.decryptor()
         self.socket = EncryptedSocketWrapper(self.socket, enc, dec)
         self.socket_file = EncryptedFileObjectWrapper(self.socket_file, dec)

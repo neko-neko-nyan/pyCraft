@@ -7,7 +7,7 @@ from minecraft.networking.encryption import (
     encrypt_token_and_secret,
     generate_shared_secret,
     generate_verification_hash,
-    create_AES_cipher,
+    create_aes_cipher,
     EncryptedFileObjectWrapper,
     EncryptedSocketWrapper
 )
@@ -71,7 +71,7 @@ class Encryption(unittest.TestCase):
                           verification_hash)
 
     def test_file_object_wrapper(self):
-        cipher = create_AES_cipher(generate_shared_secret())
+        cipher = create_aes_cipher(generate_shared_secret())
         encryptor = cipher.encryptor()
         decryptor = cipher.decryptor()
 
@@ -88,11 +88,11 @@ class Encryption(unittest.TestCase):
     def test_socket_wrapper(self):
         secret = generate_shared_secret()
 
-        cipher = create_AES_cipher(secret)
+        cipher = create_aes_cipher(secret)
         encryptor = cipher.encryptor()
         decryptor = cipher.decryptor()
 
-        server_cipher = create_AES_cipher(secret)
+        server_cipher = create_aes_cipher(secret)
         server_encryptor = server_cipher.encryptor()
         server_decryptor = server_cipher.decryptor()
 
