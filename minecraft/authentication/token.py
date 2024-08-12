@@ -29,6 +29,9 @@ class MinecraftToken(typing.NamedTuple):
     def is_valid(self) -> bool:
         return self.expires_at > datetime.datetime.now()
 
+    def __bool__(self):
+        return self.is_valid
+
     @classmethod
     def from_dict(cls, data: dict) -> 'MinecraftToken':
         created_at = data.get('created_at')

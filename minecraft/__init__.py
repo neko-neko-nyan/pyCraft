@@ -3,8 +3,8 @@ A modern, Python3-compatible, well-documented library for communicating
 with a MineCraft server.
 """
 
-from collections import OrderedDict, namedtuple
 import re
+import typing
 
 # The version number of the most recent pyCraft release.
 __version__ = "0.7.0"
@@ -12,8 +12,12 @@ __version__ = "0.7.0"
 # This bit occurs in the protocol numbers of pre-release versions after 1.16.3.
 PRE = 1 << 30
 
-# A record representing a Minecraft version in the following list.
-Version = namedtuple('Version', ('id', 'protocol', 'supported'))
+
+class Version(typing.NamedTuple):
+    id: str
+    protocol: int
+    supported: bool
+
 
 # A list of Minecraft versions known to pyCraft, including all supported
 # versions as well as some unsupported versions (used by certain forward-
@@ -480,13 +484,13 @@ KNOWN_MINECRAFT_VERSION_RECORDS = [
 
 # An OrderedDict mapping the id string of each known Minecraft version to its
 # protocol version number, in chronological order of release.
-KNOWN_MINECRAFT_VERSIONS = OrderedDict()
+KNOWN_MINECRAFT_VERSIONS = {}
 
 # As KNOWN_MINECRAFT_VERSIONS, but only contains versions supported by pyCraft.
-SUPPORTED_MINECRAFT_VERSIONS = OrderedDict()
+SUPPORTED_MINECRAFT_VERSIONS = {}
 
 # As SUPPORTED_MINECRAFT_VERSIONS, but only contains release versions.
-RELEASE_MINECRAFT_VERSIONS = OrderedDict()
+RELEASE_MINECRAFT_VERSIONS = {}
 
 # A list of the protocol version numbers in KNOWN_MINECRAFT_VERSIONS
 # in the same order (chronological) but without duplicates.
@@ -507,7 +511,7 @@ PROTOCOL_VERSION_INDICES = {}
 
 
 def initglobals(use_known_records=False):
-    '''Initialise the above global variables, using
+    """Initialise the above global variables, using
        'SUPPORTED_MINECRAFT_VERSIONS' as the source if 'use_known_records' is
        False (for backward compatibility, this is the default behaviour), or
        otherwise using 'KNOWN_MINECRAFT_VERSION_RECORDS' as the source.
@@ -517,7 +521,7 @@ def initglobals(use_known_records=False):
        during runtime and then the derived data to be updated as well, to allow
        for dynamic version support. All updates are done by reference to allow
        this to work elsewhere in the code.
-    '''
+    """
     if use_known_records:
         # Update the variables that depend on KNOWN_MINECRAFT_VERSION_RECORDS.
         KNOWN_MINECRAFT_VERSIONS.clear()

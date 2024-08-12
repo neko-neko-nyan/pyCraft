@@ -1,12 +1,13 @@
 """Minecraft data types that are used by packets, but don't have a specific
    network representation.
 """
+import typing
 from collections import namedtuple
 
 from minecraft.utility import multi_attribute_alias
 
 
-class Vector(namedtuple('BaseVector', ('x', 'y', 'z'))):
+class Vector(typing.NamedTuple):
     """An immutable type usually used to represent 3D spatial coordinates,
        supporting elementwise vector addition, subtraction, and negation; and
        scalar multiplication and (right) division.
@@ -14,30 +15,32 @@ class Vector(namedtuple('BaseVector', ('x', 'y', 'z'))):
        NOTE: subclasses of 'Vector' should have '__slots__ = ()' to avoid the
        creation of a '__dict__' attribute, which would waste space.
     """
-    __slots__ = ()
+    x: float
+    y: float
+    z: float
 
     def __add__(self, other):
         return NotImplemented if not isinstance(other, Vector) else \
-               type(self)(self.x + other.x, self.y + other.y, self.z + other.z)
+               Vector(self.x + other.x, self.y + other.y, self.z + other.z)
 
     def __sub__(self, other):
         return NotImplemented if not isinstance(other, Vector) else \
-               type(self)(self.x - other.x, self.y - other.y, self.z - other.z)
+               Vector(self.x - other.x, self.y - other.y, self.z - other.z)
 
     def __neg__(self):
-        return type(self)(-self.x, -self.y, -self.z)
+        return Vector(-self.x, -self.y, -self.z)
 
     def __mul__(self, other):
-        return type(self)(self.x*other, self.y*other, self.z*other)
+        return Vector(self.x*other, self.y*other, self.z*other)
 
     def __rmul__(self, other):
-        return type(self)(other*self.x, other*self.y, other*self.z)
+        return Vector(other*self.x, other*self.y, other*self.z)
 
     def __truediv__(self, other):
-        return type(self)(self.x/other, self.y/other, self.z/other)
+        return Vector(self.x/other, self.y/other, self.z/other)
 
     def __floordiv__(self, other):
-        return type(self)(self.x//other, self.y//other, self.z//other)
+        return Vector(self.x//other, self.y//other, self.z//other)
 
     __div__ = __floordiv__
 

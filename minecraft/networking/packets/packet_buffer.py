@@ -26,3 +26,6 @@ class PacketBuffer(object):
 
     def get_writable(self):
         return self.bytes.getvalue()
+
+    def is_eof(self):
+        return self.bytes.tell() == self.bytes.getbuffer().nbytes

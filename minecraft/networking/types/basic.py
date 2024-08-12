@@ -54,62 +54,62 @@ class Type(object):
 
 
 class Boolean(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('?', file_object.read(1))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('?', value))
 
 
 class UnsignedByte(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>B', file_object.read(1))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>B', value))
 
 
 class Byte(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>b', file_object.read(1))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>b', value))
 
 
 class Short(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>h', file_object.read(2))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>h', value))
 
 
 class UnsignedShort(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>H', file_object.read(2))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>H', value))
 
 
 class Integer(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>i', file_object.read(4))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>i', value))
 
 
@@ -132,13 +132,13 @@ FixedPointInteger = FixedPoint(Integer)
 
 
 class Angle(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         # Linearly transform angle in steps of 1/256 into steps of 1/360
         return 360 * UnsignedByte.read(file_object) / 256
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         # Normalize angle between 0 and 255 and convert to int.
         UnsignedByte.send(round(256 * ((value % 360) / 360)), socket)
 
@@ -167,8 +167,8 @@ class VarInt(Type):
                 raise ValueError("Tried to read too long of a VarInt")
         return number
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         out = bytes()
         while True:
             byte = value & 0x7F
@@ -208,65 +208,65 @@ VARINT_SIZE_TABLE = {
 
 
 class Long(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>q', file_object.read(8))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>q', value))
 
 
 class UnsignedLong(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>Q', file_object.read(8))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>Q', value))
 
 
 class Float(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>f', file_object.read(4))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>f', value))
 
 
 class Double(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return struct.unpack('>d', file_object.read(8))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(struct.pack('>d', value))
 
 
 class ShortPrefixedByteArray(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         length = Short.read(file_object)
         return struct.unpack(str(length) + "s", file_object.read(length))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         Short.send(len(value), socket)
         socket.send(value)
 
 
 class VarIntPrefixedByteArray(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         length = VarInt.read(file_object)
         return struct.unpack(str(length) + "s", file_object.read(length))[0]
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         VarInt.send(len(value), socket)
         socket.send(struct.pack(str(len(value)) + "s", value))
 
@@ -275,35 +275,35 @@ class TrailingByteArray(Type):
     """ A byte array consisting of all remaining data. If present in a packet
         definition, this should only be the type of the last field. """
 
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return file_object.read()
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(value)
 
 
 class String(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         length = VarInt.read(file_object)
         return file_object.read(length).decode("utf-8")
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         value = value.encode('utf-8')
         VarInt.send(len(value), socket)
         socket.send(value)
 
 
 class UUID(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return str(uuid.UUID(bytes=file_object.read(16)))
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         socket.send(uuid.UUID(value).bytes)
 
 
@@ -311,8 +311,8 @@ class Position(Type, Vector):
     """3D position vectors with a specific, compact network representation."""
     __slots__ = ()
 
-    @staticmethod
-    def read_with_context(file_object, context):
+    @classmethod
+    def read_with_context(cls, file_object, context):
         location = UnsignedLong.read(file_object)
         x = int(location >> 38)                # 26 most significant bits
 
@@ -334,8 +334,8 @@ class Position(Type, Vector):
 
         return Position(x=x, y=y, z=z)
 
-    @staticmethod
-    def send_with_context(position, socket, context):
+    @classmethod
+    def send_with_context(cls, position, socket, context):
         # 'position' can be either a tuple or Position object.
         x, y, z = position
         value = ((x & 0x3FFFFFF) << 38 | (z & 0x3FFFFFF) << 12 | (y & 0xFFF)
@@ -345,12 +345,12 @@ class Position(Type, Vector):
 
 
 class NBT(Type):
-    @staticmethod
-    def read(file_object):
+    @classmethod
+    def read(cls, file_object):
         return pynbt.NBTFile(io=file_object)
 
-    @staticmethod
-    def send(value, socket):
+    @classmethod
+    def send(cls, value, socket):
         buffer = io.BytesIO()
         pynbt.NBTFile(value=value).save(buffer)
         socket.send(buffer.getvalue())

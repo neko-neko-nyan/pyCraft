@@ -10,10 +10,9 @@ def generate_shared_secret():
     return os.urandom(16)
 
 
-def create_AES_cipher(shared_secret):
-    cipher = Cipher(algorithms.AES(shared_secret), modes.CFB8(shared_secret),
+def create_aes_cipher(shared_secret):
+    return Cipher(algorithms.AES(shared_secret), modes.CFB8(shared_secret),
                     backend=default_backend())
-    return cipher
 
 
 def encrypt_token_and_secret(pubkey, verification_token, shared_secret):
@@ -45,12 +44,8 @@ def generate_verification_hash(server_id, shared_secret, public_key):
 def minecraft_sha1_hash_digest(sha1_hash):
     # Minecraft first parses the sha1 bytes as a signed number and then
     # spits outs its hex representation
-    number_representation = _number_from_bytes(sha1_hash.digest(), signed=True)
+    number_representation = int.from_bytes(sha1_hash.digest(), byteorder='big', signed=True)
     return format(number_representation, 'x')
-
-
-def _number_from_bytes(b, signed=False):
-    return int.from_bytes(b, byteorder='big', signed=signed)
 
 
 class EncryptedFileObjectWrapper(object):
